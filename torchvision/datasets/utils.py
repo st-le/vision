@@ -7,9 +7,32 @@ import tarfile
 from typing import Any, Callable, List, Iterable, Optional, TypeVar
 from urllib.parse import urlparse
 import zipfile
+import urllib
+import urllib.request
+import urllib.error
 
 import torch
 from torch.utils.model_zoo import tqdm
+try:
+    from ..version import __version__ as __vision_version__   # noqa: F401
+except ImportError:
+    __vision_version__ = "undefined"
+
+USER_AGENT = os.environ.get(
+    "TORCHVISION_USER_AGENT",
+    f"pytorch-{torch.__version__}/vision-{__vision_version__}"
+)
+
+
+def _urlretrieve(url: str, filename: str, chunk_size: int = 1024) -> None:
+    with open(filename, "wb") as fh:
+        with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": USER_AGENT})) as response:
+            with tqdm(total=response.length) as pbar:
+                for chunk in iter(lambda: response.read(chunk_size), ""):
+                    if not chunk:
+                        break
+                    pbar.update(chunk_size)
+                    fh.write(chunk)
 
 
 def gen_bar_updater() -> Callable[[int, int, int], None]:
@@ -44,18 +67,20 @@ def check_integrity(fpath: str, md5: Optional[str] = None) -> bool:
     return check_md5(fpath, md5)
 
 
-def _get_redirect_url(url: str, max_hops: int = 10) -> str:
-    import requests
+def _get_redirect_url(url: str, max_hops: int = 3) -> str:
+    initial_url = url
+    headers = {"Method": "HEAD", "User-Agent": USER_AGENT}
 
-    for hop in range(max_hops + 1):
-        response = requests.get(url)
+    for _ in range(max_hops + 1):
+        with urllib.request.urlopen(urllib.request.Request(url, headers=headers)) as response:
+            if response.url == url or response.url is None:
+                return url
 
-        if response.url == url or response.url is None:
-            return url
-
-        url = response.url
+            url = response.url
     else:
-        raise RecursionError(f"Too many redirects: {max_hops + 1})")
+        raise RecursionError(
+            f"Request to {initial_url} exceeded {max_hops} redirects. The last redirect points to {url}."
+        )
 
 
 def _get_google_drive_file_id(url: str) -> Optional[str]:
@@ -83,8 +108,6 @@ def download_url(
         md5 (str, optional): MD5 checksum of the download. If None, do not check
         max_redirect_hops (int, optional): Maximum number of redirect hops allowed
     """
-    import urllib
-
     root = os.path.expanduser(root)
     if not filename:
         filename = os.path.basename(url)
@@ -108,19 +131,13 @@ def download_url(
     # download the file
     try:
         print('Downloading ' + url + ' to ' + fpath)
-        urllib.request.urlretrieve(
-            url, fpath,
-            reporthook=gen_bar_updater()
-        )
+        _urlretrieve(url, fpath)
     except (urllib.error.URLError, IOError) as e:  # type: ignore[attr-defined]
         if url[:5] == 'https':
             url = url.replace('https:', 'http:')
             print('Failed download. Trying https -> http instead.'
                   ' Downloading ' + url + ' to ' + fpath)
-            urllib.request.urlretrieve(
-                url, fpath,
-                reporthook=gen_bar_updater()
-            )
+            _urlretrieve(url, fpath)
         else:
             raise e
     # check integrity of downloaded file

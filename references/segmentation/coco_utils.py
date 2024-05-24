@@ -8,7 +8,7 @@ import os
 
 from pycocotools import mask as coco_mask
 
-from .transforms import Compose
+from transforms import Compose
 
 
 class FilterAndRemapCocoCategories(object):
@@ -44,37 +44,18 @@ def convert_coco_poly_to_mask(segmentations, height, width):
 
 
 class ConvertCocoPolysToMask(object):
-    def __init__(self, use_binary_mask=False):
-        """
-            Args:
-                use_binary_mask (bool) set whether to return each binary mask per instance (True) or a mask with all object IDs (False)
-        """
-        self.use_binary_mask = use_binary_mask
-
-    def __call__(self, image, anno, chosen_cls=None):
+    def __call__(self, image, anno):
         w, h = image.size
-        if chosen_cls is None:
-            segmentations = [obj["segmentation"] for obj in anno]
-            cats = [obj["category_id"] for obj in anno]
-        else:
-            segmentations = []
-            cats = []
-            for obj in anno:
-                if obj['category_id'] in chosen_cls:
-                    segmentations.append(obj['segmentation'])
-                    cats.append(obj['category_id'])
+        segmentations = [obj["segmentation"] for obj in anno]
+        cats = [obj["category_id"] for obj in anno]
         if segmentations:
             masks = convert_coco_poly_to_mask(segmentations, h, w)
-            if not self.use_binary_mask:
-                cats = torch.as_tensor(cats, dtype=masks.dtype)
-                # merge all instance masks into a single segmentation map
-                # with its corresponding categories
-                target, _ = (masks * cats[:, None, None]).max(dim=0)
-                # discard overlapping instances
-                target[masks.sum(0) > 1] = 255
-            else: 
-                target = masks
-                return image, target.numpy()
+            cats = torch.as_tensor(cats, dtype=masks.dtype)
+            # merge all instance masks into a single segmentation map
+            # with its corresponding categories
+            target, _ = (masks * cats[:, None, None]).max(dim=0)
+            # discard overlapping instances
+            target[masks.sum(0) > 1] = 255
         else:
             target = torch.zeros((h, w), dtype=torch.uint8)
         target = Image.fromarray(target.numpy())

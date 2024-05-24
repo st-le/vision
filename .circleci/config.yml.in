@@ -48,11 +48,11 @@ binary_common: &binary_common
     build_version:
       description: "version number of release binary; by default, build a nightly"
       type: string
-      default: "0.9.0"
+      default: "0.9.1"
     pytorch_version:
       description: "PyTorch version to build against; by default, use a nightly"
       type: string
-      default: "1.8.0"
+      default: "1.8.1"
     # Don't edit these
     python_version:
       description: "Python version to build against (e.g., 3.7)"
@@ -194,7 +194,11 @@ jobs:
     steps:
       - checkout_merge
       - designate_upload_channel
-      - run: packaging/build_conda.sh
+      - run:
+          name: Build conda packages
+          no_output_timeout: 20m
+          command: |
+            packaging/build_conda.sh
       - store_artifacts:
           path: /opt/conda/conda-bld/linux-64
       - persist_to_workspace:
@@ -210,6 +214,11 @@ jobs:
     steps:
       - checkout_merge
       - designate_upload_channel
+      - run:
+          name: _HACK_ Install CUDA compatible cmath
+          no_output_timeout: 1m
+          command: |
+              powershell .circleci/scripts/vs_install_cmath.ps1
       - run:
           name: Build conda packages
           no_output_timeout: 20m
@@ -237,6 +246,11 @@ jobs:
     steps:
       - checkout_merge
       - designate_upload_channel
+      - run:
+          name: _HACK_ Install CUDA compatible cmath
+          no_output_timeout: 1m
+          command: |
+              powershell .circleci/scripts/vs_install_cmath.ps1
       - run:
           name: Build wheel packages
           command: |
@@ -545,6 +559,11 @@ jobs:
       - checkout
       - designate_upload_channel
       - run:
+          name: _HACK_ Install CUDA compatible cmath
+          no_output_timeout: 1m
+          command: |
+              powershell .circleci/scripts/vs_install_cmath.ps1
+      - run:
           name: Generate cache key
           # This will refresh cache on Sundays, nightly build should generate new cache.
           command: echo "$(date +"%Y-%U")" > .circleci-weekly
@@ -586,6 +605,11 @@ jobs:
       - checkout
       - designate_upload_channel
       - run:
+          name: _HACK_ Install CUDA compatible cmath
+          no_output_timeout: 1m
+          command: |
+              powershell .circleci/scripts/vs_install_cmath.ps1
+      - run:
           name: Generate cache key
           # This will refresh cache on Sundays, nightly build should generate new cache.
           command: echo "$(date +"%Y-%U")" > .circleci-weekly
@@ -593,7 +617,7 @@ jobs:
           {% raw %}
           keys:
             - env-v1-windows-{{ arch }}-py<< parameters.python_version >>-{{ checksum ".circleci/unittest/windows/scripts/environment.yml" }}-{{ checksum ".circleci-weekly" }}
-          {% endraw %} 
+          {% endraw %}
       - run:
           name: Setup
           command: .circleci/unittest/windows/scripts/setup_env.sh
@@ -715,6 +739,11 @@ jobs:
       - checkout_merge
       - designate_upload_channel
       - run:
+          name: _HACK_ Install CUDA compatible cmath
+          no_output_timeout: 1m
+          command: |
+              powershell .circleci/scripts/vs_install_cmath.ps1
+      - run:
           command: |
             set -ex
             source packaging/windows/internal/vc_install_helper.sh
@@ -727,6 +756,11 @@ jobs:
     steps:
       - checkout_merge
       - designate_upload_channel
+      - run:
+          name: _HACK_ Install CUDA compatible cmath
+          no_output_timeout: 1m
+          command: |
+              powershell .circleci/scripts/vs_install_cmath.ps1
       - run:
           command: |
             set -ex

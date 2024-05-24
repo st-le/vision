@@ -5,9 +5,9 @@ import torch
 
 import torchvision.models.detection.mask_rcnn
 
-from .coco_utils import get_coco_api_from_dataset
-from .coco_eval import CocoEvaluator
-from . import utils
+from coco_utils import get_coco_api_from_dataset
+from coco_eval import CocoEvaluator
+import utils
 
 import mlflow
 from mlflow import log_metric
@@ -80,18 +80,14 @@ def train_one_epoch(model, optimizer, data_loader, device, epoch, print_freq, tb
 
 
 def _get_iou_types(model):
-    import vision
-    import vision.torchvision
-    import vision.torchvision.models as models
-    import vision.torchvision.models.detection
     model_without_ddp = model
     if isinstance(model, torch.nn.parallel.DistributedDataParallel):
         model_without_ddp = model.module
     iou_types = ["bbox"]
-    if isinstance(model_without_ddp, vision.torchvision.models.detection.MaskRCNN):
+    if isinstance(model_without_ddp, torchvision.models.detection.MaskRCNN):
         iou_types.append("segm")
-    if isinstance(model_without_ddp, vision.torchvision.models.detection.KeypointRCNN) or \
-        isinstance(model_without_ddp, vision.torchvision.models.detection.MultiheadKeypointRCNN):
+    if isinstance(model_without_ddp, torchvision.models.detection.KeypointRCNN) or \
+        isinstance(model_without_ddp, torchvision.models.detection.MultiheadKeypointRCNN):
         iou_types.append("keypoints")
     return iou_types
 
