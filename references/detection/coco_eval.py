@@ -27,12 +27,15 @@ def to_multihead_keypoint_array(self : simplecoco = None, target = None):
         # target['keypoint_muticlass_structure'] = org_target_keypoints_structure
         max_num = max(org_target_keypoints_structure)
 
-        # uncollcapse the first dimension
+        # uncollapse the first dimension
         target_kp_labels = np.array(target['keypoint_labels']).flatten().tolist()
         target_kp_catids = np.array(target['keypoint_catids']).flatten().tolist()
-        target_kps = np.array(target['keypoints']).squeeze()
-        vis = np.array(target['keypoint_visibility']).squeeze()
-        target_kps_vis = np.hstack((target_kps, np.expand_dims(vis,axis=1)))
+        target_kps = np.array(target['keypoints'])
+        assert len(target_kps.shape)==3, "keypoints must be a 3D array"
+
+        vis = np.array(target['keypoint_visibility'])
+        assert len(vis.shape)==2, "visibility must be a 2D array"        
+        target_kps_vis = np.concatenate((target_kps, np.expand_dims(vis,axis=2)), axis=2)
         target_kp_catids_norep = []
         target_kp_class_range = []
         idx=0
