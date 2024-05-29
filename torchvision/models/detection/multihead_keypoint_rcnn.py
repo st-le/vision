@@ -1,6 +1,7 @@
+from typing import Any, Optional
+
 import torch
 from torch import nn
-
 from torchvision.ops import MultiScaleRoIAlign
 
 from torchvision.models.detection._utils import overwrite_eps
@@ -10,6 +11,12 @@ from torchvision.models.detection.faster_rcnn import FasterRCNN
 
 from torchvision.models.detection.backbone_utils import resnet_fpn_backbone, _validate_trainable_layers
 from torchvision.models.detection.keypoint_rcnn import KeypointRCNNHeads, model_urls
+
+
+__all__ = [
+    "MultiheadKeypointRCNN",
+    "multihead_keypointrcnn_resnet50_fpn"
+]
 
 
 def multihead_keypointrcnn_resnet50_fpn(pretrained=False, progress=True,
@@ -166,7 +173,10 @@ class MultiheadKeypointRCNN(FasterRCNN):
 
         assert isinstance(num_keypoints, list)
 
-        assert isinstance(keypoint_roi_pool, (MultiScaleRoIAlign, type(None)))
+        if not isinstance(keypoint_roi_pool, (MultiScaleRoIAlign, type(None))):
+            raise TypeError(
+                "keypoint_roi_pool should be of type MultiScaleRoIAlign or None instead of {type(keypoint_roi_pool)}"
+            )
         if min_size is None:
             min_size = (640, 672, 704, 736, 768, 800)
 
@@ -177,10 +187,7 @@ class MultiheadKeypointRCNN(FasterRCNN):
         out_channels = backbone.out_channels
 
         if keypoint_roi_pool is None:
-            keypoint_roi_pool = MultiScaleRoIAlign(
-                featmap_names=['0', '1', '2', '3'],
-                output_size=14,
-                sampling_ratio=2)
+            keypoint_roi_pool = MultiScaleRoIAlign(featmap_names=["0", "1", "2", "3"], output_size=14, sampling_ratio=2)
 
         if keypoint_vis:
             keypoint_vis_head_out = 512
