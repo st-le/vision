@@ -1,10 +1,13 @@
-from PIL import Image
 import os
 from os.path import abspath, expanduser
+from pathlib import Path
+
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+
 import torch
-from typing import Any, Callable, List, Dict, Optional, Tuple, Union
-from .utils import check_integrity, download_file_from_google_drive, \
-    download_and_extract_archive, extract_archive, verify_str_arg
+from PIL import Image
+
+from .utils import download_and_extract_archive, download_file_from_google_drive, extract_archive, verify_str_arg
 from .vision import VisionDataset
 
 
@@ -12,8 +15,11 @@ class WIDERFace(VisionDataset):
     """`WIDERFace <http://shuoyang1213.me/WIDERFACE/>`_ Dataset.
 
     Args:
-        root (string): Root directory where images and annotations are downloaded to.
+        root (str or ``pathlib.Path``): Root directory where images and annotations are downloaded to.
             Expects the following folder structure if download=False:
+
+            .. code::
+
                 <root>
                     └── widerface
                         ├── wider_face_split ('wider_face_split.zip' if compressed)
@@ -22,39 +28,44 @@ class WIDERFace(VisionDataset):
                         └── WIDER_test ('WIDER_test.zip' if compressed)
         split (string): The dataset split to use. One of {``train``, ``val``, ``test``}.
             Defaults to ``train``.
-        transform (callable, optional): A function/transform that  takes in a PIL image
+        transform (callable, optional): A function/transform that takes in a PIL image
             and returns a transformed version. E.g, ``transforms.RandomCrop``
         target_transform (callable, optional): A function/transform that takes in the
             target and transforms it.
         download (bool, optional): If true, downloads the dataset from the internet and
             puts it in root directory. If dataset is already downloaded, it is not
             downloaded again.
+
+            .. warning::
+
+                To download the dataset `gdown <https://github.com/wkentaro/gdown>`_ is required.
+
     """
 
     BASE_FOLDER = "widerface"
     FILE_LIST = [
-        # File ID                        MD5 Hash                            Filename
-        ("0B6eKvaijfFUDQUUwd21EckhUbWs", "3fedf70df600953d25982bcd13d91ba2", "WIDER_train.zip"),
-        ("0B6eKvaijfFUDd3dIRmpvSk8tLUk", "dfa7d7e790efa35df3788964cf0bbaea", "WIDER_val.zip"),
-        ("0B6eKvaijfFUDbW4tdGpaYjgzZkU", "e5d8f4248ed24c334bbd12f49c29dd40", "WIDER_test.zip")
+        # File ID                             MD5 Hash                            Filename
+        ("15hGDLhsx8bLgLcIRD5DhYt5iBxnjNF1M", "3fedf70df600953d25982bcd13d91ba2", "WIDER_train.zip"),
+        ("1GUCogbp16PMGa39thoMMeWxp7Rp5oM8Q", "dfa7d7e790efa35df3788964cf0bbaea", "WIDER_val.zip"),
+        ("1HIfDbVEWKmsYKJZm4lchTBDLW5N7dY5T", "e5d8f4248ed24c334bbd12f49c29dd40", "WIDER_test.zip"),
     ]
     ANNOTATIONS_FILE = (
-        "http://mmlab.ie.cuhk.edu.hk/projects/WIDERFace/support/bbx_annotation/wider_face_split.zip",
+        "http://shuoyang1213.me/WIDERFACE/support/bbx_annotation/wider_face_split.zip",
         "0e3767bcf0e326556d407bf5bff5d27c",
-        "wider_face_split.zip"
+        "wider_face_split.zip",
     )
 
     def __init__(
-            self,
-            root: str,
-            split: str = "train",
-            transform: Optional[Callable] = None,
-            target_transform: Optional[Callable] = None,
-            download: bool = False,
+        self,
+        root: Union[str, Path],
+        split: str = "train",
+        transform: Optional[Callable] = None,
+        target_transform: Optional[Callable] = None,
+        download: bool = False,
     ) -> None:
-        super(WIDERFace, self).__init__(root=os.path.join(root, self.BASE_FOLDER),
-                                        transform=transform,
-                                        target_transform=target_transform)
+        super().__init__(
+            root=os.path.join(root, self.BASE_FOLDER), transform=transform, target_transform=target_transform
+        )
         # check arguments
         self.split = verify_str_arg(split, "split", ("train", "val", "test"))
 
@@ -62,8 +73,7 @@ class WIDERFace(VisionDataset):
             self.download()
 
         if not self._check_integrity():
-            raise RuntimeError("Dataset not found or corrupted. " +
-                               "You can use download=True to download and prepare it")
+            raise RuntimeError("Dataset not found or corrupted. You can use download=True to download and prepare it")
 
         self.img_info: List[Dict[str, Union[str, Dict[str, torch.Tensor]]]] = []
         if self.split in ("train", "val"):
@@ -98,13 +108,13 @@ class WIDERFace(VisionDataset):
 
     def extra_repr(self) -> str:
         lines = ["Split: {split}"]
-        return '\n'.join(lines).format(**self.__dict__)
+        return "\n".join(lines).format(**self.__dict__)
 
     def parse_train_val_annotations_file(self) -> None:
         filename = "wider_face_train_bbx_gt.txt" if self.split == "train" else "wider_face_val_bbx_gt.txt"
         filepath = os.path.join(self.root, "wider_face_split", filename)
 
-        with open(filepath, "r") as f:
+        with open(filepath) as f:
             lines = f.readlines()
             file_name_line, num_boxes_line, box_annotation_line = True, False, False
             num_boxes, box_counter = 0, 0
@@ -129,25 +139,29 @@ class WIDERFace(VisionDataset):
                         box_annotation_line = False
                         file_name_line = True
                         labels_tensor = torch.tensor(labels)
-                        self.img_info.append({
-                            "img_path": img_path,
-                            "annotations": {"bbox": labels_tensor[:, 0:4],  # x, y, width, height
-                                            "blur": labels_tensor[:, 4],
-                                            "expression": labels_tensor[:, 5],
-                                            "illumination": labels_tensor[:, 6],
-                                            "occlusion": labels_tensor[:, 7],
-                                            "pose": labels_tensor[:, 8],
-                                            "invalid": labels_tensor[:, 9]}
-                        })
+                        self.img_info.append(
+                            {
+                                "img_path": img_path,
+                                "annotations": {
+                                    "bbox": labels_tensor[:, 0:4].clone(),  # x, y, width, height
+                                    "blur": labels_tensor[:, 4].clone(),
+                                    "expression": labels_tensor[:, 5].clone(),
+                                    "illumination": labels_tensor[:, 6].clone(),
+                                    "occlusion": labels_tensor[:, 7].clone(),
+                                    "pose": labels_tensor[:, 8].clone(),
+                                    "invalid": labels_tensor[:, 9].clone(),
+                                },
+                            }
+                        )
                         box_counter = 0
                         labels.clear()
                 else:
-                    raise RuntimeError("Error parsing annotation file {}".format(filepath))
+                    raise RuntimeError(f"Error parsing annotation file {filepath}")
 
     def parse_test_annotations_file(self) -> None:
         filepath = os.path.join(self.root, "wider_face_split", "wider_face_test_filelist.txt")
         filepath = abspath(expanduser(filepath))
-        with open(filepath, "r") as f:
+        with open(filepath) as f:
             lines = f.readlines()
             for line in lines:
                 line = line.rstrip()
@@ -168,7 +182,7 @@ class WIDERFace(VisionDataset):
 
     def download(self) -> None:
         if self._check_integrity():
-            print('Files already downloaded and verified')
+            print("Files already downloaded and verified")
             return
 
         # download and extract image data
@@ -178,6 +192,6 @@ class WIDERFace(VisionDataset):
             extract_archive(filepath)
 
         # download and extract annotation files
-        download_and_extract_archive(url=self.ANNOTATIONS_FILE[0],
-                                     download_root=self.root,
-                                     md5=self.ANNOTATIONS_FILE[1])
+        download_and_extract_archive(
+            url=self.ANNOTATIONS_FILE[0], download_root=self.root, md5=self.ANNOTATIONS_FILE[1]
+        )

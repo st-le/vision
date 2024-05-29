@@ -1,12 +1,13 @@
 import os
 import shutil
-from .vision import VisionDataset
-from typing import Any, Callable, Optional, Tuple
+from pathlib import Path
+from typing import Any, Callable, Optional, Tuple, Union
 
 import numpy as np
-
 from PIL import Image
-from .utils import download_url, verify_str_arg, download_and_extract_archive
+
+from .utils import download_and_extract_archive, download_url, verify_str_arg
+from .vision import VisionDataset
 
 
 class SBDataset(VisionDataset):
@@ -27,7 +28,7 @@ class SBDataset(VisionDataset):
         This class needs `scipy <https://docs.scipy.org/doc/>`_ to load target files from `.mat` format.
 
     Args:
-        root (string): Root directory of the Semantic Boundaries Dataset
+        root (str or ``pathlib.Path``): Root directory of the Semantic Boundaries Dataset
         image_set (string, optional): Select the image_set to use, ``train``, ``val`` or ``train_noval``.
             Image set ``train_noval`` excludes VOC 2012 val images.
         mode (string, optional): Select target type. Possible values 'boundaries' or 'segmentation'.
@@ -41,7 +42,7 @@ class SBDataset(VisionDataset):
             if `mode='boundaries'` or PIL image if `mode='segmentation'`.
     """
 
-    url = "http://www.eecs.berkeley.edu/Research/Projects/CS/vision/grouping/semantic_contours/benchmark.tgz"
+    url = "https://www2.eecs.berkeley.edu/Research/Projects/CS/vision/grouping/semantic_contours/benchmark.tgz"
     md5 = "82b4d87ceb2ed10f6038a1cba92111cb"
     filename = "benchmark.tgz"
 
@@ -50,30 +51,29 @@ class SBDataset(VisionDataset):
     voc_split_md5 = "79bff800c5f0b1ec6b21080a3c066722"
 
     def __init__(
-            self,
-            root: str,
-            image_set: str = "train",
-            mode: str = "boundaries",
-            download: bool = False,
-            transforms: Optional[Callable] = None,
+        self,
+        root: Union[str, Path],
+        image_set: str = "train",
+        mode: str = "boundaries",
+        download: bool = False,
+        transforms: Optional[Callable] = None,
     ) -> None:
 
         try:
             from scipy.io import loadmat
+
             self._loadmat = loadmat
         except ImportError:
-            raise RuntimeError("Scipy is not found. This dataset needs to have scipy installed: "
-                               "pip install scipy")
+            raise RuntimeError("Scipy is not found. This dataset needs to have scipy installed: pip install scipy")
 
-        super(SBDataset, self).__init__(root, transforms)
-        self.image_set = verify_str_arg(image_set, "image_set",
-                                        ("train", "val", "train_noval"))
+        super().__init__(root, transforms)
+        self.image_set = verify_str_arg(image_set, "image_set", ("train", "val", "train_noval"))
         self.mode = verify_str_arg(mode, "mode", ("segmentation", "boundaries"))
         self.num_classes = 20
 
         sbd_root = self.root
-        image_dir = os.path.join(sbd_root, 'img')
-        mask_dir = os.path.join(sbd_root, 'cls')
+        image_dir = os.path.join(sbd_root, "img")
+        mask_dir = os.path.join(sbd_root, "cls")
 
         if download:
             download_and_extract_archive(self.url, self.root, filename=self.filename, md5=self.md5)
@@ -81,36 +81,34 @@ class SBDataset(VisionDataset):
             for f in ["cls", "img", "inst", "train.txt", "val.txt"]:
                 old_path = os.path.join(extracted_ds_root, f)
                 shutil.move(old_path, sbd_root)
-            download_url(self.voc_train_url, sbd_root, self.voc_split_filename,
-                         self.voc_split_md5)
+            download_url(self.voc_train_url, sbd_root, self.voc_split_filename, self.voc_split_md5)
 
         if not os.path.isdir(sbd_root):
-            raise RuntimeError('Dataset not found or corrupted.' +
-                               ' You can use download=True to download it')
+            raise RuntimeError("Dataset not found or corrupted. You can use download=True to download it")
 
-        split_f = os.path.join(sbd_root, image_set.rstrip('\n') + '.txt')
+        split_f = os.path.join(sbd_root, image_set.rstrip("\n") + ".txt")
 
-        with open(os.path.join(split_f), "r") as fh:
+        with open(os.path.join(split_f)) as fh:
             file_names = [x.strip() for x in fh.readlines()]
 
         self.images = [os.path.join(image_dir, x + ".jpg") for x in file_names]
         self.masks = [os.path.join(mask_dir, x + ".mat") for x in file_names]
-        assert (len(self.images) == len(self.masks))
 
-        self._get_target = self._get_segmentation_target \
-            if self.mode == "segmentation" else self._get_boundaries_target
+        self._get_target = self._get_segmentation_target if self.mode == "segmentation" else self._get_boundaries_target
 
     def _get_segmentation_target(self, filepath: str) -> Image.Image:
         mat = self._loadmat(filepath)
-        return Image.fromarray(mat['GTcls'][0]['Segmentation'][0])
+        return Image.fromarray(mat["GTcls"][0]["Segmentation"][0])
 
     def _get_boundaries_target(self, filepath: str) -> np.ndarray:
         mat = self._loadmat(filepath)
-        return np.concatenate([np.expand_dims(mat['GTcls'][0]['Boundaries'][0][i][0].toarray(), axis=0)
-                               for i in range(self.num_classes)], axis=0)
+        return np.concatenate(
+            [np.expand_dims(mat["GTcls"][0]["Boundaries"][0][i][0].toarray(), axis=0) for i in range(self.num_classes)],
+            axis=0,
+        )
 
     def __getitem__(self, index: int) -> Tuple[Any, Any]:
-        img = Image.open(self.images[index]).convert('RGB')
+        img = Image.open(self.images[index]).convert("RGB")
         target = self._get_target(self.masks[index])
 
         if self.transforms is not None:
@@ -123,4 +121,4 @@ class SBDataset(VisionDataset):
 
     def extra_repr(self) -> str:
         lines = ["Image set: {image_set}", "Mode: {mode}"]
-        return '\n'.join(lines).format(**self.__dict__)
+        return "\n".join(lines).format(**self.__dict__)

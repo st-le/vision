@@ -62,7 +62,7 @@ T bilinear_interpolate(
 
 template <typename T>
 void ps_roi_align_forward_kernel_impl(
-    int nthreads,
+    int num_rois,
     const T* input,
     const T spatial_scale,
     int channels,
@@ -75,7 +75,6 @@ void ps_roi_align_forward_kernel_impl(
     int channels_out,
     T* output,
     int* channel_mapping) {
-  int num_rois = nthreads / channels_out / pooled_width / pooled_height;
   for (int n = 0; n < num_rois; n++) {
     // [start, end) interval for spatial sampling
     const T* offset_rois = rois + n * 5;
@@ -210,7 +209,6 @@ void ps_roi_align_backward_kernel_impl(
     int nthreads,
     const T* grad_output,
     const int* channel_mapping,
-    int num_rois,
     const T spatial_scale,
     int channels,
     int height,
@@ -335,8 +333,7 @@ std::tuple<at::Tensor, at::Tensor> ps_roi_align_forward_kernel(
   auto channel_mapping =
       at::zeros(output.sizes(), input.options().dtype(at::kInt));
 
-  auto output_size = output.numel();
-  if (output_size == 0) {
+  if (output.numel() == 0) {
     return std::make_tuple(output, channel_mapping);
   }
 
@@ -344,7 +341,7 @@ std::tuple<at::Tensor, at::Tensor> ps_roi_align_forward_kernel(
   AT_DISPATCH_FLOATING_TYPES_AND_HALF(
       input.scalar_type(), "ps_roi_align_forward_kernel", [&] {
         ps_roi_align_forward_kernel_impl<scalar_t>(
-            output_size,
+            num_rois,
             input_.data_ptr<scalar_t>(),
             spatial_scale,
             channels,
@@ -386,7 +383,6 @@ at::Tensor ps_roi_align_backward_kernel(
   at::CheckedFrom c = "ps_roi_align_backward_kernel";
   at::checkAllSameType(c, {grad_t, rois_t});
 
-  auto num_rois = rois.size(0);
   auto grad_input =
       at::zeros({batch_size, channels, height, width}, grad.options());
 
@@ -404,7 +400,6 @@ at::Tensor ps_roi_align_backward_kernel(
             grad.numel(),
             grad_.data_ptr<scalar_t>(),
             channel_mapping.data_ptr<int>(),
-            num_rois,
             spatial_scale,
             channels,
             height,

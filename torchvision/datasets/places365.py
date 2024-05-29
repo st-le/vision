@@ -1,10 +1,11 @@
 import os
 from os import path
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 from urllib.parse import urljoin
 
 from .folder import default_loader
-from .utils import verify_str_arg, check_integrity, download_and_extract_archive
+from .utils import check_integrity, download_and_extract_archive, verify_str_arg
 from .vision import VisionDataset
 
 
@@ -12,14 +13,14 @@ class Places365(VisionDataset):
     r"""`Places365 <http://places2.csail.mit.edu/index.html>`_ classification dataset.
 
     Args:
-        root (string): Root directory of the Places365 dataset.
-        split (string, optional): The dataset split. Can be one of ``train-standard`` (default), ``train-challendge``,
+        root (str or ``pathlib.Path``): Root directory of the Places365 dataset.
+        split (string, optional): The dataset split. Can be one of ``train-standard`` (default), ``train-challenge``,
             ``val``.
-        small (bool, optional): If ``True``, uses the small images, i. e. resized to 256 x 256 pixels, instead of the
+        small (bool, optional): If ``True``, uses the small images, i.e. resized to 256 x 256 pixels, instead of the
             high resolution ones.
         download (bool, optional): If ``True``, downloads the dataset components and places them in ``root``. Already
             downloaded archives are not downloaded again.
-        transform (callable, optional): A function/transform that  takes in an PIL image
+        transform (callable, optional): A function/transform that takes in a PIL image
             and returns a transformed version. E.g, ``transforms.RandomCrop``
         target_transform (callable, optional): A function/transform that takes in the
             target and transforms it.
@@ -32,7 +33,7 @@ class Places365(VisionDataset):
         targets (list): The class_index value for each image in the dataset
 
     Raises:
-        RuntimeError: If ``download is False`` and the meta files, i. e. the devkit, are not present or corrupted.
+        RuntimeError: If ``download is False`` and the meta files, i.e. the devkit, are not present or corrupted.
         RuntimeError: If ``download is True`` and the image archive is already extracted.
     """
     _SPLITS = ("train-standard", "train-challenge", "val")
@@ -62,7 +63,7 @@ class Places365(VisionDataset):
 
     def __init__(
         self,
-        root: str,
+        root: Union[str, Path],
         split: str = "train-standard",
         small: bool = False,
         download: bool = False,
@@ -117,7 +118,7 @@ class Places365(VisionDataset):
         if not self._check_integrity(file, md5, download):
             self.download_devkit()
 
-        with open(file, "r") as fh:
+        with open(file) as fh:
             class_to_idx = dict(process(line) for line in fh)
 
         return sorted(class_to_idx.keys()), class_to_idx
@@ -132,7 +133,7 @@ class Places365(VisionDataset):
         if not self._check_integrity(file, md5, download):
             self.download_devkit()
 
-        with open(file, "r") as fh:
+        with open(file) as fh:
             images = [process(line) for line in fh]
 
         _, targets = zip(*images)
@@ -162,7 +163,7 @@ class Places365(VisionDataset):
         return verify_str_arg(split, "split", self._SPLITS)
 
     def _check_integrity(self, file: str, md5: str, download: bool) -> bool:
-        integrity = check_integrity(path.join(self.root, file), md5=md5)
+        integrity = check_integrity(file, md5=md5)
         if not integrity and not download:
             raise RuntimeError(
                 f"The file {file} does not exist or is corrupted. You can set download=True to download it."

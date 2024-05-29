@@ -1,31 +1,64 @@
-torchvision.io
-==============
+Decoding / Encoding images and videos
+=====================================
 
 .. currentmodule:: torchvision.io
 
 The :mod:`torchvision.io` package provides functions for performing IO
-operations. They are currently specific to reading and writing video and
-images.
+operations. They are currently specific to reading and writing images and
+videos.
+
+Images
+------
+
+.. autosummary::
+    :toctree: generated/
+    :template: function.rst
+
+    read_image
+    decode_image
+    encode_jpeg
+    decode_jpeg
+    write_jpeg
+    encode_png
+    decode_png
+    write_png
+    read_file
+    write_file
+
+.. autosummary::
+    :toctree: generated/
+    :template: class.rst
+
+    ImageReadMode
+
+
 
 Video
 -----
 
-.. autofunction:: read_video
+.. autosummary::
+    :toctree: generated/
+    :template: function.rst
 
-.. autofunction:: read_video_timestamps
-
-.. autofunction:: write_video
+    read_video
+    read_video_timestamps
+    write_video
 
 
 Fine-grained video API
-----------------------
+^^^^^^^^^^^^^^^^^^^^^^
 
 In addition to the :mod:`read_video` function, we provide a high-performance 
 lower-level API for more fine-grained control compared to the :mod:`read_video` function.
 It does all this whilst fully supporting torchscript.
 
-.. autoclass:: VideoReader
-    :members: __next__, get_metadata, set_current_stream, seek
+.. betastatus:: fine-grained video API
+
+.. autosummary::
+    :toctree: generated/
+    :template: class.rst
+
+    VideoReader
 
 
 Example of inspecting a video:
@@ -54,19 +87,3 @@ Example of inspecting a video:
     # the constructor we select a default video stream, but
     # in practice, we can set whichever stream we would like 
     video.set_current_stream("video:0")
-
-
-Image
------
-
-.. autofunction:: read_image
-
-.. autofunction:: decode_image
-
-.. autofunction:: encode_jpeg
-
-.. autofunction:: write_jpeg
-
-.. autofunction:: encode_png
-
-.. autofunction:: write_png

@@ -1,3 +1,11 @@
+import os
+import sys
+
+import torch
+
+from ._internally_replaced_utils import _get_extension_path
+
+
 _HAS_OPS = False
 
 
@@ -5,54 +13,30 @@ def _has_ops():
     return False
 
 
-def _register_extensions():
-    import os
-    import importlib
-    import torch
-
-    # load the custom_op_library and register the custom ops
-    lib_dir = os.path.dirname(__file__)
-    if os.name == 'nt':
-        # Register the main torchvision library location on the default DLL path
-        import ctypes
-        import sys
-
-        kernel32 = ctypes.WinDLL('kernel32.dll', use_last_error=True)
-        with_load_library_flags = hasattr(kernel32, 'AddDllDirectory')
-        prev_error_mode = kernel32.SetErrorMode(0x0001)
-
-        if with_load_library_flags:
-            kernel32.AddDllDirectory.restype = ctypes.c_void_p
-
-        if sys.version_info >= (3, 8):
-            os.add_dll_directory(lib_dir)
-        elif with_load_library_flags:
-            res = kernel32.AddDllDirectory(lib_dir)
-            if res is None:
-                err = ctypes.WinError(ctypes.get_last_error())
-                err.strerror += f' Error adding "{lib_dir}" to the DLL directories.'
-                raise err
-
-        kernel32.SetErrorMode(prev_error_mode)
-
-    loader_details = (
-        importlib.machinery.ExtensionFileLoader,
-        importlib.machinery.EXTENSION_SUFFIXES
-    )
-
-    extfinder = importlib.machinery.FileFinder(lib_dir, loader_details)
-    ext_specs = extfinder.find_spec("_C")
-    if ext_specs is None:
-        raise ImportError
-    torch.ops.load_library(ext_specs.origin)
-
-
 try:
-    _register_extensions()
+    # On Windows Python-3.8.x has `os.add_dll_directory` call,
+    # which is called to configure dll search path.
+    # To find cuda related dlls we need to make sure the
+    # conda environment/bin path is configured Please take a look:
+    # https://stackoverflow.com/questions/59330863/cant-import-dll-module-in-python
+    # Please note: if some path can't be added using add_dll_directory we simply ignore this path
+    if os.name == "nt" and sys.version_info < (3, 9):
+        env_path = os.environ["PATH"]
+        path_arr = env_path.split(";")
+        for path in path_arr:
+            if os.path.exists(path):
+                try:
+                    os.add_dll_directory(path)  # type: ignore[attr-defined]
+                except Exception:
+                    pass
+
+    lib_path = _get_extension_path("_C")
+    torch.ops.load_library(lib_path)
     _HAS_OPS = True
 
     def _has_ops():  # noqa: F811
         return True
+
 except (ImportError, OSError):
     pass
 
@@ -76,9 +60,10 @@ def _check_cuda_version():
     """
     if not _HAS_OPS:
         return -1
-    import torch
+    from torch.version import cuda as torch_version_cuda
+
     _version = torch.ops.torchvision._cuda_version()
-    if _version != -1 and torch.version.cuda is not None:
+    if _version != -1 and torch_version_cuda is not None:
         tv_version = str(_version)
         if int(tv_version) < 10000:
             tv_major = int(tv_version[0])
@@ -86,16 +71,22 @@ def _check_cuda_version():
         else:
             tv_major = int(tv_version[0:2])
             tv_minor = int(tv_version[3])
-        t_version = torch.version.cuda
-        t_version = t_version.split('.')
+        t_version = torch_version_cuda.split(".")
         t_major = int(t_version[0])
         t_minor = int(t_version[1])
-        if t_major != tv_major or t_minor != tv_minor:
-            raise RuntimeError("Detected that PyTorch and torchvision were compiled with different CUDA versions. "
-                               "PyTorch has CUDA Version={}.{} and torchvision has CUDA Version={}.{}. "
-                               "Please reinstall the torchvision that matches your PyTorch install."
-                               .format(t_major, t_minor, tv_major, tv_minor))
+        if t_major != tv_major:
+            raise RuntimeError(
+                "Detected that PyTorch and torchvision were compiled with different CUDA major versions. "
+                f"PyTorch has CUDA Version={t_major}.{t_minor} and torchvision has "
+                f"CUDA Version={tv_major}.{tv_minor}. "
+                "Please reinstall the torchvision that matches your PyTorch install."
+            )
     return _version
+
+
+def _load_library(lib_name):
+    lib_path = _get_extension_path(lib_name)
+    torch.ops.load_library(lib_path)
 
 
 _check_cuda_version()

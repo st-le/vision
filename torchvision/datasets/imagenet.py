@@ -1,17 +1,19 @@
-import warnings
-from contextlib import contextmanager
 import os
 import shutil
 import tempfile
-from typing import Any, Dict, List, Iterator, Optional, Tuple
+from contextlib import contextmanager
+from pathlib import Path
+from typing import Any, Dict, Iterator, List, Optional, Tuple, Union
+
 import torch
+
 from .folder import ImageFolder
 from .utils import check_integrity, extract_archive, verify_str_arg
 
 ARCHIVE_META = {
-    'train': ('ILSVRC2012_img_train.tar', '1d675b47d978889d74fa0da5fadfb00e'),
-    'val': ('ILSVRC2012_img_val.tar', '29b22e2961454d5413ddabcf34fc5622'),
-    'devkit': ('ILSVRC2012_devkit_t12.tar.gz', 'fa75699e90414af021442c21a62c3abf')
+    "train": ("ILSVRC2012_img_train.tar", "1d675b47d978889d74fa0da5fadfb00e"),
+    "val": ("ILSVRC2012_img_val.tar", "29b22e2961454d5413ddabcf34fc5622"),
+    "devkit": ("ILSVRC2012_devkit_t12.tar.gz", "fa75699e90414af021442c21a62c3abf"),
 }
 
 META_FILE = "meta.bin"
@@ -20,10 +22,16 @@ META_FILE = "meta.bin"
 class ImageNet(ImageFolder):
     """`ImageNet <http://image-net.org/>`_ 2012 Classification Dataset.
 
+    .. note::
+        Before using this class, it is required to download ImageNet 2012 dataset from
+        `here <https://image-net.org/challenges/LSVRC/2012/2012-downloads.php>`_ and
+        place the files ``ILSVRC2012_devkit_t12.tar.gz`` and ``ILSVRC2012_img_train.tar``
+        or ``ILSVRC2012_img_val.tar`` based on ``split`` in the root directory.
+
     Args:
-        root (string): Root directory of the ImageNet Dataset.
+        root (str or ``pathlib.Path``): Root directory of the ImageNet Dataset.
         split (string, optional): The dataset split, supports ``train``, or ``val``.
-        transform (callable, optional): A function/transform that  takes in an PIL image
+        transform (callable, optional): A function/transform that takes in a PIL image
             and returns a transformed version. E.g, ``transforms.RandomCrop``
         target_transform (callable, optional): A function/transform that takes in the
             target and transforms it.
@@ -38,41 +46,29 @@ class ImageNet(ImageFolder):
         targets (list): The class_index value for each image in the dataset
     """
 
-    def __init__(self, root: str, split: str = 'train', download: Optional[str] = None, **kwargs: Any) -> None:
-        if download is True:
-            msg = ("The dataset is no longer publicly accessible. You need to "
-                   "download the archives externally and place them in the root "
-                   "directory.")
-            raise RuntimeError(msg)
-        elif download is False:
-            msg = ("The use of the download flag is deprecated, since the dataset "
-                   "is no longer publicly accessible.")
-            warnings.warn(msg, RuntimeWarning)
-
+    def __init__(self, root: Union[str, Path], split: str = "train", **kwargs: Any) -> None:
         root = self.root = os.path.expanduser(root)
         self.split = verify_str_arg(split, "split", ("train", "val"))
 
         self.parse_archives()
         wnid_to_classes = load_meta_file(self.root)[0]
 
-        super(ImageNet, self).__init__(self.split_folder, **kwargs)
+        super().__init__(self.split_folder, **kwargs)
         self.root = root
 
         self.wnids = self.classes
         self.wnid_to_idx = self.class_to_idx
         self.classes = [wnid_to_classes[wnid] for wnid in self.wnids]
-        self.class_to_idx = {cls: idx
-                             for idx, clss in enumerate(self.classes)
-                             for cls in clss}
+        self.class_to_idx = {cls: idx for idx, clss in enumerate(self.classes) for cls in clss}
 
     def parse_archives(self) -> None:
         if not check_integrity(os.path.join(self.root, META_FILE)):
             parse_devkit_archive(self.root)
 
         if not os.path.isdir(self.split_folder):
-            if self.split == 'train':
+            if self.split == "train":
                 parse_train_archive(self.root)
-            elif self.split == 'val':
+            elif self.split == "val":
                 parse_val_archive(self.root)
 
     @property
@@ -83,53 +79,55 @@ class ImageNet(ImageFolder):
         return "Split: {split}".format(**self.__dict__)
 
 
-def load_meta_file(root: str, file: Optional[str] = None) -> Tuple[Dict[str, str], List[str]]:
+def load_meta_file(root: Union[str, Path], file: Optional[str] = None) -> Tuple[Dict[str, str], List[str]]:
     if file is None:
         file = META_FILE
     file = os.path.join(root, file)
 
     if check_integrity(file):
-        return torch.load(file)
+        return torch.load(file, weights_only=True)
     else:
-        msg = ("The meta file {} is not present in the root directory or is corrupted. "
-               "This file is automatically created by the ImageNet dataset.")
+        msg = (
+            "The meta file {} is not present in the root directory or is corrupted. "
+            "This file is automatically created by the ImageNet dataset."
+        )
         raise RuntimeError(msg.format(file, root))
 
 
-def _verify_archive(root: str, file: str, md5: str) -> None:
+def _verify_archive(root: Union[str, Path], file: str, md5: str) -> None:
     if not check_integrity(os.path.join(root, file), md5):
-        msg = ("The archive {} is not present in the root directory or is corrupted. "
-               "You need to download it externally and place it in {}.")
+        msg = (
+            "The archive {} is not present in the root directory or is corrupted. "
+            "You need to download it externally and place it in {}."
+        )
         raise RuntimeError(msg.format(file, root))
 
 
-def parse_devkit_archive(root: str, file: Optional[str] = None) -> None:
+def parse_devkit_archive(root: Union[str, Path], file: Optional[str] = None) -> None:
     """Parse the devkit archive of the ImageNet2012 classification dataset and save
     the meta information in a binary file.
 
     Args:
-        root (str): Root directory containing the devkit archive
+        root (str or ``pathlib.Path``): Root directory containing the devkit archive
         file (str, optional): Name of devkit archive. Defaults to
             'ILSVRC2012_devkit_t12.tar.gz'
     """
     import scipy.io as sio
 
-    def parse_meta_mat(devkit_root: str) -> Tuple[Dict[int, str], Dict[str, str]]:
+    def parse_meta_mat(devkit_root: str) -> Tuple[Dict[int, str], Dict[str, Tuple[str, ...]]]:
         metafile = os.path.join(devkit_root, "data", "meta.mat")
-        meta = sio.loadmat(metafile, squeeze_me=True)['synsets']
+        meta = sio.loadmat(metafile, squeeze_me=True)["synsets"]
         nums_children = list(zip(*meta))[4]
-        meta = [meta[idx] for idx, num_children in enumerate(nums_children)
-                if num_children == 0]
+        meta = [meta[idx] for idx, num_children in enumerate(nums_children) if num_children == 0]
         idcs, wnids, classes = list(zip(*meta))[:3]
-        classes = [tuple(clss.split(', ')) for clss in classes]
+        classes = [tuple(clss.split(", ")) for clss in classes]
         idx_to_wnid = {idx: wnid for idx, wnid in zip(idcs, wnids)}
         wnid_to_classes = {wnid: clss for wnid, clss in zip(wnids, classes)}
         return idx_to_wnid, wnid_to_classes
 
     def parse_val_groundtruth_txt(devkit_root: str) -> List[int]:
-        file = os.path.join(devkit_root, "data",
-                            "ILSVRC2012_validation_ground_truth.txt")
-        with open(file, 'r') as txtfh:
+        file = os.path.join(devkit_root, "data", "ILSVRC2012_validation_ground_truth.txt")
+        with open(file) as txtfh:
             val_idcs = txtfh.readlines()
         return [int(val_idx) for val_idx in val_idcs]
 
@@ -159,12 +157,12 @@ def parse_devkit_archive(root: str, file: Optional[str] = None) -> None:
         torch.save((wnid_to_classes, val_wnids), os.path.join(root, META_FILE))
 
 
-def parse_train_archive(root: str, file: Optional[str] = None, folder: str = "train") -> None:
+def parse_train_archive(root: Union[str, Path], file: Optional[str] = None, folder: str = "train") -> None:
     """Parse the train images archive of the ImageNet2012 classification dataset and
     prepare it for usage with the ImageNet dataset.
 
     Args:
-        root (str): Root directory containing the train images archive
+        root (str or ``pathlib.Path``): Root directory containing the train images archive
         file (str, optional): Name of train images archive. Defaults to
             'ILSVRC2012_img_train.tar'
         folder (str, optional): Optional name for train images folder. Defaults to
@@ -186,13 +184,13 @@ def parse_train_archive(root: str, file: Optional[str] = None, folder: str = "tr
 
 
 def parse_val_archive(
-    root: str, file: Optional[str] = None, wnids: Optional[List[str]] = None, folder: str = "val"
+    root: Union[str, Path], file: Optional[str] = None, wnids: Optional[List[str]] = None, folder: str = "val"
 ) -> None:
     """Parse the validation images archive of the ImageNet2012 classification dataset
     and prepare it for usage with the ImageNet dataset.
 
     Args:
-        root (str): Root directory containing the validation images archive
+        root (str or ``pathlib.Path``): Root directory containing the validation images archive
         file (str, optional): Name of validation images archive. Defaults to
             'ILSVRC2012_img_val.tar'
         wnids (list, optional): List of WordNet IDs of the validation images. If None
@@ -212,7 +210,7 @@ def parse_val_archive(
     val_root = os.path.join(root, folder)
     extract_archive(os.path.join(root, file), val_root)
 
-    images = sorted([os.path.join(val_root, image) for image in os.listdir(val_root)])
+    images = sorted(os.path.join(val_root, image) for image in os.listdir(val_root))
 
     for wnid in set(wnids):
         os.mkdir(os.path.join(val_root, wnid))
