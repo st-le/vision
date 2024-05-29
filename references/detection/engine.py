@@ -26,8 +26,6 @@ def train_one_epoch(model, optimizer, data_loader, device, epoch, print_freq, sc
             optimizer, start_factor=warmup_factor, total_iters=warmup_iters
         )
 
-    running_loss = 0.
-    last_loss = 0.
     for i, batch in enumerate(metric_logger.log_every(data_loader, print_freq, header)):
         if len(batch) == 0 or len(batch[0]) == 0 or batch[0] == (None,):
             continue
@@ -70,14 +68,6 @@ def train_one_epoch(model, optimizer, data_loader, device, epoch, print_freq, sc
         metric_logger.update(loss=losses_reduced, **loss_dict_reduced)
         metric_logger.update(lr=optimizer.param_groups[0]["lr"])
 
-        running_loss += loss_value
-        if i % 5 == 0:
-            last_loss = running_loss / 5 # loss per batch
-            # print('  batch {} loss: {}'.format(i + 1, last_loss))
-            tb_x = epoch * len(data_loader) + i + 1
-            if tb_writer is not None:
-                tb_writer.add_scalar('Training Loss', last_loss, tb_x)
-            running_loss = 0.
 
     return metric_logger
 
