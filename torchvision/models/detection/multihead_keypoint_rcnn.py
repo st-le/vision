@@ -3,20 +3,13 @@ from torch import nn
 
 from torchvision.ops import MultiScaleRoIAlign
 
-import vision
-import vision.torchvision
-import vision.torchvision.models
-import vision.torchvision.models.detection
-import vision.torchvision.models.detection.keypoint_rcnn
-import vision.torchvision.models.detection.backbone_utils
+from torchvision.models.detection._utils import overwrite_eps
+from torchvision.models.utils import load_state_dict_from_url
 
-from vision.torchvision.models.detection._utils import overwrite_eps
-from vision.torchvision.models.utils import load_state_dict_from_url
+from torchvision.models.detection.faster_rcnn import FasterRCNN
 
-from vision.torchvision.models.detection.faster_rcnn import FasterRCNN
-
-from vision.torchvision.models.detection.backbone_utils import resnet_fpn_backbone, _validate_trainable_layers
-from vision.torchvision.models.detection.keypoint_rcnn import KeypointRCNNHeads, model_urls
+from torchvision.models.detection.backbone_utils import resnet_fpn_backbone, _validate_trainable_layers
+from torchvision.models.detection.keypoint_rcnn import KeypointRCNNHeads, model_urls
 
 
 def multihead_keypointrcnn_resnet50_fpn(pretrained=False, progress=True,
@@ -226,7 +219,8 @@ class MultiheadKeypointRCNN(FasterRCNN):
         self.roi_heads.keypoint_head = keypoint_head
         self.roi_heads.keypoint_predictor = keypoint_predictor  # replace the multihead predictor here!
 
-        self.roi_heads.keypoint_vis_predictor = keypoint_vis_predictor
+        if keypoint_vis:
+            self.roi_heads.keypoint_vis_predictor = keypoint_vis_predictor
 
 class KeypointVisRCNNPredictor(nn.Module):
     def __init__(self, in_channels, num_keypoints):
